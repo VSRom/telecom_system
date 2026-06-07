@@ -1,4 +1,4 @@
-# TelecomSystem
+# telecom system
 
 Qt 6.5.2.
 
@@ -55,11 +55,3 @@ cmake --build . --config Release
 2. Нажать **Start Server**
 3. Запустить один или несколько экземпляров Client
 4. Нажать **Start All Clients**
-
-## Структура проекта
-
-TelecomSystem/
-├── server/
-├── client/
-├── CMakeLists.txt
-└── README.md
