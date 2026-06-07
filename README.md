@@ -37,7 +37,7 @@ Qt 6.5.2.
 
 ### Qt Creator
 
-1. Открыть проект в Qt Creator 6.5.2
+1. Открыть проект в Qt Creator
 2. Выполнить Configure Project
 3. Собрать проект
 
