@@ -5,10 +5,14 @@
 #include <QString>
 #include <QUuid>
 #include <QMap>
+/////////// Исправление 3 QDataStream
+//  #include <QDataStream>
 
 // Qt Network
 #include <QTcpServer>
 #include <QTcpSocket>
+/////// Исправление 2 приём клиентов из 1 подсети
+//  #include <QHostAddress>
 
 // Qt JSON
 #include <QJsonObject>
@@ -45,6 +49,9 @@ private slots:
     void onReadyRead();
     void onClientDisconnected();
 
+    /////// Исправление 4 ПКМ-ребут
+    //  void sendRebootToClient(const QString& clientIdStr);
+
 private:
     void sendCommandToClient(const QUuid &clientId, const QString &command);
 
@@ -60,4 +67,11 @@ private:
     double m_criticalLatency = 40.0;
     int m_criticalCpu = 80;
     int m_criticalMemory = 85;
+/////////// Исправление 3 QDataStream
+   //   QMap<QTcpSocket*, quint32> m_pendingSize;    // Храним размер для каждого сокета
+   //   void sendBinaryPacket(QTcpSocket* socket, const QJsonObject& obj);  // Все отправки на клиента
+
+/////// Исправление 2 приём клиентов из 1 подсети    // Мы тут будем проверять адреса от 1.1 до 1.254
+    //  QHostAddress m_allowedSubnet{ "192.168.1.0" };  // Адрес подсети
+    //  int m_netmask = 24; // mask 255.255.255.0
 };

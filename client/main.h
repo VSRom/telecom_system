@@ -12,6 +12,10 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QAbstractSocket>
+////////Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+// #include <QQueue>
+/////////// Исправление 3 QDataStream
+// #include <QDataStream>
 
 class DeviceEmulator : public QObject
 {
@@ -45,12 +49,21 @@ private slots:
 // Обработка успешного подключения
     void onConnected()
     {
-        qDebug() << "[Client] Successfully connected to server. Waiting for confirmation...";
-
+        qDebug() << "[Client] Successfully connected to server.";
         m_isConnected = true;
         m_waitingForStart = true;
-
         m_timer.stop();
+        
+/////////Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+        /*
+        while (!m_offQueue.isEmpty())
+            m_socket->write(m_offQueue.dequeue());
+
+        m_socket->flush();
+        qDebug() << "[Client] Queueu flushed.";
+        */
+/////////Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+
     }
 // Обработка потери соединения
     void onDisconnected()
@@ -117,6 +130,19 @@ private slots:
             {
                 qDebug() << "[Client] Server ACK:" << obj["message"].toString();
             }
+/////// Исправление 4 ПКМ-ребут
+            /*
+            else if (type == "RebootCommand") {
+                qDebug() << "[Client] REBOOT command received. Emulating restart...";
+                m_waitingForStart = true;
+                m_sendTimer.stop();
+
+                QTimer::singleShot(2000, this, [this]() {
+                    qDebug() << "[Client] Device restarted.";
+                    });
+            }
+            */
+/////// Исправление 4 ПКМ-ребут
         }
     }
 // Запуск периодической отправки данных
@@ -179,13 +205,46 @@ private slots:
                 data["message"] = longMsg;
             }
         }
-
+////////////////////////////////////============================/////////////////////////////////////////
         QJsonDocument doc(data);
+        // БЫЛО
+        //  QByteArray json = doc.toJson(QJsonDocument::Compact) + "\n";
+        //  m_socket->write(json);
+
+
+////////////////////////////////////============================/////////////////////////////////////////
+////////// Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+        /*
         QByteArray json = doc.toJson(QJsonDocument::Compact) + "\n";
 
-        m_socket->write(json);
-        m_socket->flush();
+        if (m_isConnected && m_socket->state() == QAbstractSocket::ConnectedState) {
+            m_socket->write(json);
+            m_socket->flush();
+        }
+        else {
+            m_offQueue.enqueue(json);
+            qDebug() << "[Client] Server down. Packet queued. Size: " << m_offQueue.size();
+        }
+        */
+/////////// Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+////////////////////////////////////============================/////////////////////////////////////////
+/////////// Исправление 3 QDataStream
+        /*
+        QByteArray json = doc.toJson(QJsonDocument::Compact);
+        // Создаём пакет 4 байта + JSON
+        QByteArray packet;
+        QDataStream out(&packet, QIODevice::WriteOnly);
+        // Фиксация версии ?
+        out.setVersion(QDataStream::Qt_6_4);
 
+        // Сначала размер потом данные
+        out << static_cast<quint32>(json.size());
+        packet.append(json);
+        m_socket->write(packet);
+        m_socket->flush();
+        */
+/////////// Исправление 3 QDataStream
+////////////////////////////////////============================/////////////////////////////////////////
         qDebug() << "[Client] Sent:" << data["type"].toString();
     }
 
@@ -197,4 +256,6 @@ private:
     qint64 m_startTime;
     bool m_isConnected;
     bool m_waitingForStart;
+///////Исправление 1 перевод на ОЧЕРЕДЬ! Для не потери данных!
+    // QQueue<QByteArray> m_offQueue;  // Храним наборы байтов в очереди
 };

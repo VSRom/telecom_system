@@ -20,7 +20,7 @@ void ServerWorker::startServer(quint16 port)
     }
 
     m_server = new QTcpServer(this);
-
+    // Клиент подключился -> QTcpServer -> newConnection() -> onNewConnection()
     connect(m_server, &QTcpServer::newConnection, this, &ServerWorker::onNewConnection);
 
     if (!m_server->listen(QHostAddress::Any, port))
@@ -89,7 +89,7 @@ void ServerWorker::setCriticalValues(double bandwidth, double latency, int cpu, 
             .arg(memory));
 }
 // Отправка команды клиенту
-void ServerWorker::sendCommandToClient( const QUuid &clientId, const QString &command)
+void ServerWorker::sendCommandToClient(const QUuid &clientId, const QString &command)
 {
     if (!m_clients.contains(clientId))
         return;
@@ -104,8 +104,14 @@ void ServerWorker::sendCommandToClient( const QUuid &clientId, const QString &co
     cmd["type"] = command;
     cmd["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
 
+/////////// Исправление 3 QDataStream
     socket->write(QJsonDocument(cmd).toJson(QJsonDocument::Compact)+ "\n");
     socket->flush();
+
+    //sendBinaryPacket(socket, cmd);
+/////////// Исправление 3 QDataStream
+
+
 }
 // Отправка подтверждения получения данных
 void ServerWorker::sendAck(QTcpSocket *socket, const QString &message)
@@ -117,8 +123,13 @@ void ServerWorker::sendAck(QTcpSocket *socket, const QString &message)
 
     ack["type"] = "Ack";
     ack["message"] = message;
+
+/////////// Исправление 3 QDataStream
     socket->write(QJsonDocument(ack).toJson(QJsonDocument::Compact)+ "\n");
     socket->flush();
+    //sendBinaryPacket(socket, ack);
+/////////// Исправление 3 QDataStream
+
 }
 // Обработка нового подключения клиента
 void ServerWorker::onNewConnection()
@@ -130,8 +141,23 @@ void ServerWorker::onNewConnection()
 
     if (!clientSocket)
         return;
+//////// Исправление 2 приём клиентов из 1 подсети
+    /*
+    QHostAddress clientIP = clientSocket->peerAddress(); // Получаем IP клиента
 
-    QUuid clientId = QUuid::createUuid();
+    // Проверка на вход в подсеть Клиента
+    if (!clientIP.isInSubnet(m_allowedSubnet, m_netmask)) {
+        emit logMessage(QString("Отказано в подключения для IP: %1 (не в подсети %2/%3)").arg(clientIP.toString()).arg(m_allowedSubnet.toString()).arg(m_netmask));
+
+        // Закрываем соединение и удаляем сокет
+        clientSocket->disconnectFromHost();
+        clientSocket->deleteLater();
+        return;
+    }
+    */
+/////// Исправление 2 приём клиентов из 1 подсети(E)
+
+    QUuid clientId = QUuid::createUuid();   // Создали уникальный ID
 
     m_clients[clientId] = clientSocket;
     m_clientActive[clientId] = false;
@@ -139,14 +165,20 @@ void ServerWorker::onNewConnection()
     emit logMessage(QString("Подключен клиент %1").arg(clientId.toString()));
     emit clientConnected(clientId.toString(), clientSocket->peerAddress().toString(), "Connected");
 
+    // Формируем JSON для клиента
     QJsonObject response;
-
     response["type"] = "ConnectionResponse";
     response["clientId"] = clientId.toString();
     response["message"] = "Welcome to Telecom Server";
 
+/////////// Исправление 3 QDataStream
+// 
+//// Отправка JSON по сети клиенту
     clientSocket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
-    clientSocket->flush();
+    clientSocket->flush();  // Отправь данные - не держи в буфере
+
+    //sendBinaryPacket(clientSocket, response);
+/////////// Исправление 3 QDataStream(E)
 
     connect(clientSocket, &QTcpSocket::readyRead, this, &ServerWorker::onReadyRead);
     connect(clientSocket, &QTcpSocket::disconnected, this, &ServerWorker::onClientDisconnected);
@@ -155,64 +187,142 @@ void ServerWorker::onNewConnection()
 // Обработка входящих сообщений клиента
 void ServerWorker::onReadyRead()
 {
+    // Возвращает объект который вызвал сигнал
     QTcpSocket *clientSocket = qobject_cast<QTcpSocket*>(sender());
 
     if (!clientSocket)
         return;
+////////////////////////////////////============================/////////////////////////////////////////
+/////////// Исправление 3 QDataStream
+    /*
+    QDataStream in(clientSocket);
+    // Фиксируем версию ?
+    in.setVersion(QDataStream::Qt_6_4);
 
-    QUuid clientId;
+    // Бинарный протокол
+    while (true) {
+        // Если незнаем размер пакета этого сокета
+        if (m_pendingSize.contains(clientSocket) || m_pendingSize[clientSocket] == 0) {
+            if (clientSocket->bytesAvailable() < sizeof(quint32))   // Проверки пришли ли первые 4 байта
+                break;  // Ожидаем дозагрузку данных
 
-    for (auto it = m_clients.begin(); it != m_clients.end(); ++it) {
-        if (it.value() == clientSocket) {
-            clientId = it.key();
-            break;
+            quint32 blockSize;
+            in >> blockSize;    // Прочитали размер
+            m_pendingSize[clientSocket] = blockSize; // Запомнили
         }
-    }
+        quint32 expectedSize = m_pendingSize[clientSocket];
 
-    if (clientId.isNull())
-        return;
+        // Проверка на целостность JSON
+        if (clientSocket->bytesAvailable() < expectedSize) // Проверка пришёл ли весь JSON
+            break;  // Пакет не дошёл, Ждем следующий вызов
 
-    while (clientSocket->canReadLine())
-    {
-        QByteArray line = clientSocket->readLine().trimmed();
+        // Читаем столько байт сколько нужно
+        QByteArray json = clientSocket->read(expectedSize); // Читаем ровно столько байт сколько нужно
+        m_pendingSize[clientSocket] = 0;    // Сбросили и готовимся к следующему пакету
+
+        // Парсим JSON
         QJsonParseError parseError;
-        QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
+        QJsonDocument doc = QJsonDocument::fromJson(json, &parseError);
 
-        if (parseError.error != QJsonParseError::NoError) {
-            emit logMessage(QString("JSON Error: %1").arg(parseError.errorString()));
-            continue;
-        }
-
-        if (!doc.isObject())
-            continue;
+        if (parseError.error != QJsonParseError::NoError) continue;
+        if (!doc.isObject()) continue;
 
         QJsonObject obj = doc.object();
         QString type = obj["type"].toString();
         QString timeStr = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
 
+        // Находим clientId по сокету
+        QUuid clientId;
+        for (auto it = m_clients.begin(); it != m_clients.end(); it++) {
+            if (it.value() == clientSocket) {
+                clientId = it.key();
+                break;
+            }
+        }
+        if (clientId.isNull()) continue;
         checkCriticalValues(clientId, obj);
+
+
         QString content = QJsonDocument(obj).toJson(QJsonDocument::Compact);
 
         if (type == "NetworkMetrics") {
             content = QString("BW=%1 Mbps | LAT=%2 ms | LOSS=%3 %")
-                    .arg(obj["bandwidth"].toDouble(),0,'f',2)
-                    .arg(obj["latency"].toDouble(),0,'f',2)
-                    .arg(obj["packet_loss"].toDouble()*100.0,0,'f',2);
+                .arg(obj["bandwidth"].toDouble(), 0, 'f', 2)
+                .arg(obj["latency"].toDouble(), 0, 'f', 2)
+                .arg(obj["packet_loss"].toDouble() * 100.0, 0, 'f', 2);
         }
         else if (type == "DeviceStatus") {
             content = QString("CPU=%1%% | MEM=%2%% | UPTIME=%3s")
-                    .arg(obj["cpu_usage"].toInt())
-                    .arg(obj["memory_usage"].toInt())
-                    .arg(obj["uptime"].toInt());
+                .arg(obj["cpu_usage"].toInt())
+                .arg(obj["memory_usage"].toInt())
+                .arg(obj["uptime"].toInt());
         }
         else if (type == "Log") {
             content = QString("[%1] %2")
-                    .arg(obj["severity"].toString())
-                    .arg(obj["message"].toString());
+                .arg(obj["severity"].toString())
+                .arg(obj["message"].toString());
         }
-        emit dataReceived( clientId.toString(), type, content, timeStr);
+        emit dataReceived(clientId.toString(), type, content, timeStr);
         sendAck(clientSocket, QString("%1 received").arg(type));
     }
+    */
+////////////////////////////////////============================/////////////////////////////////////////
+QUuid clientId;
+
+for (auto it = m_clients.begin(); it != m_clients.end(); ++it) {
+    if (it.value() == clientSocket) {
+        clientId = it.key();
+        break;
+    }
+}
+
+if (clientId.isNull())
+    return;
+
+// Пока есть полная строка - обрабатывай её
+while (clientSocket->canReadLine())
+{
+    QByteArray line = clientSocket->readLine().trimmed();
+
+
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
+
+    if (parseError.error != QJsonParseError::NoError) {
+        emit logMessage(QString("JSON Error: %1").arg(parseError.errorString()));
+        continue;
+    }
+
+    if (!doc.isObject())
+        continue;
+
+    QJsonObject obj = doc.object();
+    QString type = obj["type"].toString();
+    QString timeStr = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
+
+    checkCriticalValues(clientId, obj);
+    QString content = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+
+    if (type == "NetworkMetrics") {
+        content = QString("BW=%1 Mbps | LAT=%2 ms | LOSS=%3 %")
+                .arg(obj["bandwidth"].toDouble(),0,'f',2)
+                .arg(obj["latency"].toDouble(),0,'f',2)
+                .arg(obj["packet_loss"].toDouble()*100.0,0,'f',2);
+    }
+    else if (type == "DeviceStatus") {
+        content = QString("CPU=%1%% | MEM=%2%% | UPTIME=%3s")
+                .arg(obj["cpu_usage"].toInt())
+                .arg(obj["memory_usage"].toInt())
+                .arg(obj["uptime"].toInt());
+    }
+    else if (type == "Log") {
+        content = QString("[%1] %2")
+                .arg(obj["severity"].toString())
+                .arg(obj["message"].toString());
+    }
+    emit dataReceived( clientId.toString(), type, content, timeStr);
+    sendAck(clientSocket, QString("%1 received").arg(type));
+}
 }
 // Проверка полученных данных на превышение порогов
 void ServerWorker::checkCriticalValues(const QUuid &clientId, const QJsonObject &data)
@@ -275,3 +385,41 @@ void ServerWorker::onClientDisconnected()
     emit logMessage(QString("Клиент отключен: %1").arg(clientId.toString()));
     emit clientDisconnected(clientId.toString());
 }
+/////////// Исправление 3 QDataStream
+void ServerWorker::sendBinaryPacket(QTcpSocket* socket, const QJsonObject& obj) {
+    if (!socket) return;
+
+    QByteArray json = QJsonDocument(obj).toJson(QJsonDocument::Compact);
+
+    QByteArray packet;
+    QDataStream out(&packet, QIODevice::WriteOnly);
+    out.setVersion(QDataStream::Qt_6_4);
+    out << static_cast<quint32>(json.size());
+    packet.append(json);
+
+    socket->write(packet);
+    socket->flush();
+}
+/////////// Исправление 3 QDataStream
+// 
+/////// Исправление 4 ПКМ-ребут
+/*
+void ServerWorker::sendRebootToClient(const QString& clientIdStr) {
+    QUuid clientId(clientIdStr);
+    if (!m_clients.contains(clientId)) return;
+
+    QTcpSocket* socket = m_clients.value(clientId);
+    if (!socket) return;
+
+    QJsonObject cmd;
+
+    cmd["type"] = "RebootCommand";
+    cmd["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+    socket->write(QJsonDocument(cmd).toJson(QJsonDocument::Compact) + "\n");
+    socket->flush();
+
+    emit logMessage(QString("Команда Reboot отправлена клиенту %1").arg(clientIdStr));
+}
+*/
+/////// Исправление 4 ПКМ-ребут

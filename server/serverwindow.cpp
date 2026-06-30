@@ -9,12 +9,16 @@
 #include <QLineEdit>
 #include <QHeaderView>
 #include <QMetaObject>
+/////// Исправление 4 ПКМ-ребут
+//  #include <QMenu>
+//  #include <QAction>
 
 // Создание интерфейса и запуск рабочего потока сервера
 ServerWindow::ServerWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setupUI();
+
     m_thread = new QThread(this);
     m_worker = new ServerWorker();
     m_worker->moveToThread(m_thread);
@@ -158,6 +162,35 @@ void ServerWindow::setupUI()
     m_clientsTable = new QTableWidget(0, 3);
     m_clientsTable->setHorizontalHeaderLabels({"Client ID", "IP", "Status"});
     m_clientsTable->horizontalHeader()->setStretchLastSection(true);
+
+/////// Исправление 4 ПКМ-ребут
+    /*
+    m_clientsTable->setContextMenuPolicy(Qt::CustomContextMenu);
+
+    connect(m_clientsTable, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        // Узнаём строку клика
+        int row = m_clientsTable->rowAt(pos.y());
+        if (row < 0) return;
+
+        // Достаём ID
+        QTableWidgetItem* itemId = m_clientsTable->item(row, 0);
+        if (!itemId) return;
+        QString id = itemId->text();
+
+        // Создаём меню
+        QMenu menu(this);
+        QAction* rebootAction = menu.addAction("Reboot Device");
+
+        // Показываем меню и ждём клик
+        QAction* chosen = menu.exec(QCursor::pos());
+
+        //Реагируем на выбор
+        if (chosen == rebootAction)
+            QMetaObject::invokeMethod(m_worker, "sendRebootToClient", Qt::QueuedConnection, Q_ARG(QString, id));
+        });
+        */
+/////// Исправление 4 ПКМ-ребут
+
 
     m_dataTable = new QTableWidget(0, 4);
     m_dataTable->setHorizontalHeaderLabels( {"Client ID", "Type", "Content", "Time"});
