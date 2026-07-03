@@ -104,13 +104,7 @@ void ServerWorker::sendCommandToClient(const QUuid &clientId, const QString &com
     cmd["type"] = command;
     cmd["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-/////////// Исправление 3 QDataStream
-    socket->write(QJsonDocument(cmd).toJson(QJsonDocument::Compact)+ "\n");
-    socket->flush();
-
-    //sendBinaryPacket(socket, cmd);
-/////////// Исправление 3 QDataStream
-
+    sendBinaryPacket(socket, cmd);
 
 }
 // Отправка подтверждения получения данных
@@ -124,11 +118,7 @@ void ServerWorker::sendAck(QTcpSocket *socket, const QString &message)
     ack["type"] = "Ack";
     ack["message"] = message;
 
-/////////// Исправление 3 QDataStream
-    socket->write(QJsonDocument(ack).toJson(QJsonDocument::Compact)+ "\n");
-    socket->flush();
-    //sendBinaryPacket(socket, ack);
-/////////// Исправление 3 QDataStream
+    sendBinaryPacket(socket, ack);
 
 }
 // Обработка нового подключения клиента
@@ -141,8 +131,7 @@ void ServerWorker::onNewConnection()
 
     if (!clientSocket)
         return;
-//////// Исправление 2 приём клиентов из 1 подсети
-    /*
+
     QHostAddress clientIP = clientSocket->peerAddress(); // Получаем IP клиента
 
     // Проверка на вход в подсеть Клиента
@@ -154,8 +143,6 @@ void ServerWorker::onNewConnection()
         clientSocket->deleteLater();
         return;
     }
-    */
-/////// Исправление 2 приём клиентов из 1 подсети(E)
 
     QUuid clientId = QUuid::createUuid();   // Создали уникальный ID
 
@@ -171,14 +158,9 @@ void ServerWorker::onNewConnection()
     response["clientId"] = clientId.toString();
     response["message"] = "Welcome to Telecom Server";
 
-/////////// Исправление 3 QDataStream
-// 
-//// Отправка JSON по сети клиенту
-    clientSocket->write(QJsonDocument(response).toJson(QJsonDocument::Compact) + "\n");
-    clientSocket->flush();  // Отправь данные - не держи в буфере
 
-    //sendBinaryPacket(clientSocket, response);
-/////////// Исправление 3 QDataStream(E)
+    sendBinaryPacket(clientSocket, response);
+
 
     connect(clientSocket, &QTcpSocket::readyRead, this, &ServerWorker::onReadyRead);
     connect(clientSocket, &QTcpSocket::disconnected, this, &ServerWorker::onClientDisconnected);
@@ -192,12 +174,9 @@ void ServerWorker::onReadyRead()
 
     if (!clientSocket)
         return;
-////////////////////////////////////============================/////////////////////////////////////////
-/////////// Исправление 3 QDataStream
-    /*
+
     QDataStream in(clientSocket);
-    // Фиксируем версию ?
-    in.setVersion(QDataStream::Qt_6_4);
+
 
     // Бинарный протокол
     while (true) {
@@ -265,64 +244,6 @@ void ServerWorker::onReadyRead()
         emit dataReceived(clientId.toString(), type, content, timeStr);
         sendAck(clientSocket, QString("%1 received").arg(type));
     }
-    */
-////////////////////////////////////============================/////////////////////////////////////////
-QUuid clientId;
-
-for (auto it = m_clients.begin(); it != m_clients.end(); ++it) {
-    if (it.value() == clientSocket) {
-        clientId = it.key();
-        break;
-    }
-}
-
-if (clientId.isNull())
-    return;
-
-// Пока есть полная строка - обрабатывай её
-while (clientSocket->canReadLine())
-{
-    QByteArray line = clientSocket->readLine().trimmed();
-
-
-    QJsonParseError parseError;
-    QJsonDocument doc = QJsonDocument::fromJson(line, &parseError);
-
-    if (parseError.error != QJsonParseError::NoError) {
-        emit logMessage(QString("JSON Error: %1").arg(parseError.errorString()));
-        continue;
-    }
-
-    if (!doc.isObject())
-        continue;
-
-    QJsonObject obj = doc.object();
-    QString type = obj["type"].toString();
-    QString timeStr = QDateTime::currentDateTime().toString("hh:mm:ss.zzz");
-
-    checkCriticalValues(clientId, obj);
-    QString content = QJsonDocument(obj).toJson(QJsonDocument::Compact);
-
-    if (type == "NetworkMetrics") {
-        content = QString("BW=%1 Mbps | LAT=%2 ms | LOSS=%3 %")
-                .arg(obj["bandwidth"].toDouble(),0,'f',2)
-                .arg(obj["latency"].toDouble(),0,'f',2)
-                .arg(obj["packet_loss"].toDouble()*100.0,0,'f',2);
-    }
-    else if (type == "DeviceStatus") {
-        content = QString("CPU=%1%% | MEM=%2%% | UPTIME=%3s")
-                .arg(obj["cpu_usage"].toInt())
-                .arg(obj["memory_usage"].toInt())
-                .arg(obj["uptime"].toInt());
-    }
-    else if (type == "Log") {
-        content = QString("[%1] %2")
-                .arg(obj["severity"].toString())
-                .arg(obj["message"].toString());
-    }
-    emit dataReceived( clientId.toString(), type, content, timeStr);
-    sendAck(clientSocket, QString("%1 received").arg(type));
-}
 }
 // Проверка полученных данных на превышение порогов
 void ServerWorker::checkCriticalValues(const QUuid &clientId, const QJsonObject &data)
@@ -385,7 +306,7 @@ void ServerWorker::onClientDisconnected()
     emit logMessage(QString("Клиент отключен: %1").arg(clientId.toString()));
     emit clientDisconnected(clientId.toString());
 }
-/////////// Исправление 3 QDataStream
+ // QDataStream
 void ServerWorker::sendBinaryPacket(QTcpSocket* socket, const QJsonObject& obj) {
     if (!socket) return;
 
@@ -400,10 +321,8 @@ void ServerWorker::sendBinaryPacket(QTcpSocket* socket, const QJsonObject& obj) 
     socket->write(packet);
     socket->flush();
 }
-/////////// Исправление 3 QDataStream
-// 
-/////// Исправление 4 ПКМ-ребут
-/*
+
+// ПКМ по Клиенту -> ребут
 void ServerWorker::sendRebootToClient(const QString& clientIdStr) {
     QUuid clientId(clientIdStr);
     if (!m_clients.contains(clientId)) return;
@@ -416,10 +335,7 @@ void ServerWorker::sendRebootToClient(const QString& clientIdStr) {
     cmd["type"] = "RebootCommand";
     cmd["timestamp"] = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-    socket->write(QJsonDocument(cmd).toJson(QJsonDocument::Compact) + "\n");
-    socket->flush();
+    sendBinaryPacket(socket, cmd);
 
     emit logMessage(QString("Команда Reboot отправлена клиенту %1").arg(clientIdStr));
 }
-*/
-/////// Исправление 4 ПКМ-ребут

@@ -9,9 +9,8 @@
 #include <QLineEdit>
 #include <QHeaderView>
 #include <QMetaObject>
-/////// Исправление 4 ПКМ-ребут
-//  #include <QMenu>
-//  #include <QAction>
+#include <QMenu>
+#include <QAction>
 
 // Создание интерфейса и запуск рабочего потока сервера
 ServerWindow::ServerWindow(QWidget *parent)
@@ -163,8 +162,6 @@ void ServerWindow::setupUI()
     m_clientsTable->setHorizontalHeaderLabels({"Client ID", "IP", "Status"});
     m_clientsTable->horizontalHeader()->setStretchLastSection(true);
 
-/////// Исправление 4 ПКМ-ребут
-    /*
     m_clientsTable->setContextMenuPolicy(Qt::CustomContextMenu);
 
     connect(m_clientsTable, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
@@ -188,9 +185,6 @@ void ServerWindow::setupUI()
         if (chosen == rebootAction)
             QMetaObject::invokeMethod(m_worker, "sendRebootToClient", Qt::QueuedConnection, Q_ARG(QString, id));
         });
-        */
-/////// Исправление 4 ПКМ-ребут
-
 
     m_dataTable = new QTableWidget(0, 4);
     m_dataTable->setHorizontalHeaderLabels( {"Client ID", "Type", "Content", "Time"});
