@@ -1,57 +1,61 @@
-# telecom system
+### Telecom System
 
-Qt 6.5.2.
+Qt 6.5.2. 
 
-Клиент-серверное приложение для эмуляции телекоммуникационных устройств.
+A client-server application for simulating telecommunication devices. 
 
-## Сервер
+### Server
 
-- GUI-приложение на Qt Widgets
-- Прослушивает порт 12345
-- Поддерживает несколько клиентов
-- Отображает клиентов и получаемые данные
-- Позволяет настраивать критические значения метрик
-- Формирует предупреждения при превышении порогов
+* GUI application based on Qt Widgets
+* Listens on port 12345
+* Supports multiple clients
+* Displays connected clients and received data
+* Allows configuring critical threshold values for metrics
+* Generates warnings when thresholds are exceeded
 
-## Клиент
+### Client
 
-- Консольный эмулятор устройства
-- Подключается к localhost:12345
-- Автоматически переподключается при потере соединения
-- Отправляет данные типов:
-  - Network Metrics
-  - Device Status
-  - Log
+* Console-based device emulator
+* Connects to localhost:12345
+* Automatically reconnects if the connection is lost
+* Sends the following data types: 
 
-## Используемые технологии
+  * Network Metrics
+  * Device Status
+  * Log
 
-- Qt 6.5.2
-- QTcpServer
-- QTcpSocket
-- QJsonDocument
-- QJsonObject
-- QThread
-- QTableWidget
+### Technologies Used
 
-## Сборка
+* Qt 6.5.2
+* QTcpServer
+* QTcpSocket
+* QJsonDocument
+* QJsonObject
+* QThread
+* QTableWidget
+
+### Build
 
 ### Qt Creator
 
-1. Открыть проект в Qt Creator
-2. Выполнить Configure Project
-3. Собрать проект
+1. Open the project in Qt Creator
+2. Perform Configure Project
+3. Build the project
 
 ### CMake
 
-```bash
+bash
+
 mkdir build
 cd build
 cmake ..
 cmake --build . --config Release
-```
-## Запуск
 
-1. Запустить Server
-2. Нажать **Start Server**
-3. Запустить один или несколько экземпляров Client
-4. Нажать **Start All Clients**
+Используйте код с осторожностью.
+
+### Running the Application
+
+1. Run Server
+2. Click **Start Server**
+3. Run one or multiple instances of Client
+4. Click **Start All Clients**
